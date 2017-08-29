@@ -9,6 +9,7 @@
 
 library(shiny)
 library(tidyverse)
+library(cowplot)
 
 # Define server logic to read file every nth seconds
 shinyServer(function(input, output, session) {
@@ -94,23 +95,36 @@ shinyServer(function(input, output, session) {
       data <- loaded_data_subset()
       data$Sample <- as.factor("Sample 1")
       
-      #TotalCounts <- group_by(data, Species) %>%
-      #  summarise(Abundance = sum(abund)) %>%
-      #  arrange(desc(Abundance))
-      #data$species <- factor(data$Species, levels = rev(TotalCounts$Species))
-      #data$Species <- factor(data$Species, levels = data$Species[order(data$abund, decreasing = F)])
+      unclass <- data[data$Species == "Unclassified",]
+      data <- data[data$Species != "Unclassified",]
+      unclass_amount <- (nrow(unclass)/(nrow(data) + nrow(unclass)))*100
+      plot_text <- paste0("Unclassified species were removed.\nRead abundance was\n", round(unclass_amount, 1),"% of total")
       
-      data <- data[order(data$abund, decreasing = TRUE),]#Problem - ggplot overrules this?
+      data <- data[order(data$abund, decreasing = TRUE),]#Make into factor/levels now that unclassifieds are stripped?
       data <- data[c(1:as.numeric(input$heat_tax.show)),]#Problem here - takes the first rows. Maybe something like 'unique' might work?
       
+      TotalCounts <- group_by(data, Species) %>%
+        summarise(Abundance = sum(abund)) %>%
+        arrange(desc(Abundance))
+      data$Species <- factor(data$Species, levels = rev(TotalCounts$Species))
+      #data$Species <- factor(data$Species, levels = data$Species[order(data$abund, decreasing = F)])
+      
+      
+      #data$Species <- factor(data$Species, levels = data$Species[order(data$abund, decreasing = T)])
+      
+      ## Remove unclassified before plotting! move them into a database and show statistics instead, then make factors on the rest of the database
 
     ## Heatmap
-    ggplot(data = data, aes_string(x = data$Sample, y = data$Species)) +
+    p <- ggplot(data = data, aes_string(x = data$Sample, y = data$Species)) +
       geom_tile(aes_string(fill = data$abund), colour = "white", size = 0.5) +
+      geom_text(data = data, aes(label = round(data$abund, 1)), colour = "grey10") +
       theme(
-        legend.title = element_blank(),
+        axis.text = element_text(size = 12),
         axis.title = element_blank()
-      )
+      ) +
+      scale_fill_gradient(low = "white", high = "red3") +
+      labs(x = "", y = "", fill = "Relative read\nabundance [%]")
+    ggdraw(add_sub(p, plot_text, x = 0, hjust = 0))
     
     #
     } else if(input$plot_choice == "barplot"){
